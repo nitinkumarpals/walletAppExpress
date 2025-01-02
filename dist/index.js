@@ -28,7 +28,7 @@ var app = (0, import_express.default)();
 var port = 3e3;
 app.use((0, import_express.json)());
 app.get("/", (req, res) => {
-  res.json({ message: "Okewree" });
+  res.json({ message: "ok" });
 });
 app.listen(port, () => {
   console.log(`App is listening on Port: ${port}`);
