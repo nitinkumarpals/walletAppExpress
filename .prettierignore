@@ -1,0 +1,16 @@
+# Ignore artifacts:
+/dist
+/build
+/coverage
+
+# Ignore node_modules and bower_components
+/node_modules
+/bower_components
+
+# Ignore IDE files
+/.idea
+/.vscode
+
+# Ignore OS files
+/.DS_Store
+Thumbs.db
