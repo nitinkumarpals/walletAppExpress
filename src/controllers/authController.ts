@@ -4,11 +4,12 @@ import { signUpSchema } from "../schemas/signUpSchema";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { promises } from "dns";
 
 export const registerUser = async (
   req: Request,
   res: Response
-) => {
+): Promise<void> => {
   try {
     const body = req.body;
     const parsedBody = signUpSchema.safeParse(body);
@@ -17,53 +18,64 @@ export const registerUser = async (
         success: false,
         message:
           "Validation error: " +
-          parsedBody.error.errors
-            .map((err) => `${err.path[0]} ${err.message}`)
-            .join(", ")
+          parsedBody.error.errors.map((err) => `${err.path[0]} ${err.message}`)
       });
       return;
     }
-
     const { email, name, password } = parsedBody.data;
-    const secureToken = crypto.randomBytes(16).toString("hex");
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const existingUser = await prisma.user.findFirst({
-      where: { OR: [{ email }, { name }] }
+      where: {
+        OR: [{ name }, { email }]
+      },
+      select: { name: true, email: true }
     });
     if (existingUser) {
-      res.status(400).json({
+      if (existingUser.name === name) {
+        res.status(400).json({
+          success: false,
+          message: "Username already exist"
+        });
+      } else if (existingUser.email === email) {
+        res.status(400).json({
+          success: false,
+          message: "User emil already exist"
+        });
+      }
+      return;
+    }
+    const user = await prisma.user.create({
+      data: { name, email, password: hashedPassword }
+    });
+    if (!user) {
+      res.status(500).json({
         success: false,
-        message: "User already exists"
+        message: "Error in creating user"
       });
       return;
     }
-
-    const user = await prisma.user.create({
-      data: { email, name, password: hashedPassword }
-    });
-
     const token = jwt.sign(
-      { email: user.email, id: user.id },
+      {
+        email: user.email,
+        id: user.id
+      },
       process.env.JWT_SECRET || ""
     );
-
-    if (!user) {
-      throw new Error("Error in creating user");
-    }
-
     res.status(200).json({
       success: true,
-      message: "User created successfully",
-      id: user.id.toString(),
-      name: user.name,
-      email: user.email
+      message: "user created successfully",
+      token
     });
-  } catch (error) {
-    console.error(error);
+  } catch (error: Error | any) {
     res.status(500).json({
       success: false,
-      message: "Something went wrong"
+      message: "some internal error occurred",
+      error: error as Error
     });
   }
 };
+
+export const loginUser = async (
+  req: Request,
+  res: Response
+): Promise<void> => {};
