@@ -3,8 +3,22 @@ var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getOwnPropSymbols = Object.getOwnPropertySymbols;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __propIsEnum = Object.prototype.propertyIsEnumerable;
+var __objRest = (source, exclude) => {
+  var target = {};
+  for (var prop in source)
+    if (__hasOwnProp.call(source, prop) && exclude.indexOf(prop) < 0)
+      target[prop] = source[prop];
+  if (source != null && __getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(source)) {
+      if (exclude.indexOf(prop) < 0 && __propIsEnum.call(source, prop))
+        target[prop] = source[prop];
+    }
+  return target;
+};
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
@@ -69,14 +83,14 @@ var init_authUtils = __esm({
       try {
         const user = yield prisma.user.findUnique({
           where: { email },
-          select: { id: true, email: true, password: true }
+          select: { id: true, email: true, password: true, name: true }
         });
         if (!user) {
           return done(null, false, { message: "User not found" });
         }
         const isMatch = yield import_bcryptjs.default.compare(password, user.password);
         if (!isMatch) {
-          return done(null, null, { message: "Invalid credentials" });
+          return done(null, false, { message: "Invalid credentials" });
         }
         return done(null, user);
       } catch (error) {
@@ -215,22 +229,34 @@ var import_passport = __toESM(require("passport"));
 var import_jsonwebtoken2 = __toESM(require("jsonwebtoken"));
 var authRouter = (0, import_express.Router)();
 authRouter.post("/signup", registerUser);
-authRouter.post(
-  "/login",
-  import_passport.default.authenticate("local"),
-  (req, res) => {
-    const user = req.user;
-    const token = import_jsonwebtoken2.default.sign(
-      { email: user.email, id: user.id },
-      process.env.JWT_SECRET || ""
-    );
-    res.status(200).json({
-      message: "Login successful",
-      user,
-      token
-    });
-  }
-);
+authRouter.post("/login", (req, res, next) => {
+  import_passport.default.authenticate(
+    "local",
+    (err, user, info) => {
+      if (err) {
+        return res.status(500).json({ message: "An error occurred", error: err.message });
+      }
+      if (!user) {
+        return res.status(401).json({ message: (info == null ? void 0 : info.message) || "Authentication failed" });
+      }
+      req.login(user, { session: false }, (loginErr) => {
+        if (loginErr) {
+          return res.status(500).json({ message: "Login failed", error: loginErr.message });
+        }
+      });
+      const _a = req.user, { password } = _a, userData = __objRest(_a, ["password"]);
+      const token = import_jsonwebtoken2.default.sign(
+        { email: userData.email, id: userData.id },
+        process.env.JWT_SECRET || ""
+      );
+      res.status(200).json({
+        message: "Login successful",
+        userData,
+        token
+      });
+    }
+  )(req, res, next);
+});
 
 // src/index.ts
 import_dotenv.default.config();
