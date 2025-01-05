@@ -220,7 +220,8 @@ var init_authController = __esm({
               email
             },
             update: {
-              authType: "GOOGLE"
+              authType: "GOOGLE",
+              googleId: profile.id
             },
             create: {
               email,
@@ -289,6 +290,7 @@ var require_passport = __commonJS({
 var import_express2 = __toESM(require("express"));
 var import_express_session = __toESM(require("express-session"));
 var import_passport2 = __toESM(require("passport"));
+var import_cors = __toESM(require("cors"));
 var import_config = require("dotenv/config");
 var import_passport3 = __toESM(require_passport());
 
@@ -306,9 +308,10 @@ authRouter.get(
   "/callback",
   import_passport.default.authenticate("google", { failureMessage: "failed" }),
   (req, res) => {
+    const _a = req.user, { password } = _a, userData = __objRest(_a, ["password"]);
     res.status(200).json({
       message: "Login successful",
-      user: req.user
+      user: userData
     });
   }
 );
@@ -340,14 +343,20 @@ authRouter.get("/logout", (req, res) => {
     if (err) {
       return res.status(500).json({ message: "Logout failed", error: err.message });
     }
+    req.session.destroy((err2) => {
+      if (err2) {
+        return res.status(500).json({ message: "Failed to destroy session", error: err2.message });
+      }
+      res.clearCookie("connect.sid", { path: "/" });
+      res.status(200).json({ message: "Logout successful" });
+    });
   });
-  res.status(200).json({ message: "Logout successful" });
 });
 
 // src/index.ts
 var app = (0, import_express2.default)();
 var port = 3e3;
-app.use((0, import_express2.json)()).use(
+app.use((0, import_cors.default)()).use((0, import_express2.json)()).use(
   (0, import_express_session.default)({
     secret: process.env.SESSION_SECRET || "",
     resave: false,
@@ -362,6 +371,9 @@ app.get("/", (req, res) => {
   res.json({ message: "ok" });
 });
 app.use("/api/v1/auth", authRouter);
+app.get("/session-info", (req, res) => {
+  res.json(req.session);
+});
 app.listen(port, () => {
   console.log(`App is listening on Port: ${port}`);
 });

@@ -153,7 +153,8 @@ export const loginWithGoogle = async (
           email: email as string
         },
         update: {
-          authType: 'GOOGLE'
+          authType: 'GOOGLE',
+          googleId: profile.id
         },
         create: {
           email: email as string,
