@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { registerUser } from '../controllers/authController';
 import { Request, Response } from 'express';
 import passport from 'passport';
-import Jwt from 'jsonwebtoken';
 import { User } from '@prisma/client';
 
 export const authRouter = Router();
@@ -16,29 +15,11 @@ authRouter.get(
   passport.authenticate('google', { failureMessage: 'failed' }),
   (req, res) => {
     res.status(200).json({
+      message: 'Login successful',
       user: req.user
     });
   }
 );
-// authRouter.post(
-//   '/login',
-//   passport.authenticate('local'),
-//   (req: Request, res: Response) => {
-//     // If authentication is successful, this function will be called.
-//     const { password, ...user } = req.user as User;
-//     console.log(user);
-//     const token = Jwt.sign(
-//       { email: user.email, id: user.id },
-//       process.env.JWT_SECRET || ''
-//     );
-
-//     res.status(200).json({
-//       message: 'Login successful',
-//       user,
-//       token
-//     });
-//   }
-// );
 
 authRouter.post('/login', (req: Request, res: Response, next) => {
   passport.authenticate(
@@ -66,15 +47,10 @@ authRouter.post('/login', (req: Request, res: Response, next) => {
         }
       });
       const { password, ...userData } = req.user as User;
-      const token = Jwt.sign(
-        { email: userData.email, id: userData.id },
-        process.env.JWT_SECRET || ''
-      );
 
       res.status(200).json({
         message: 'Login successful',
         userData,
-        token
       });
     }
   )(req, res, next);

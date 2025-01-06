@@ -13,7 +13,6 @@ passport.use(
     verifyCallback
   )
 );
-
 passport.use(
   new GoogleStrategy(
     {
@@ -21,9 +20,7 @@ passport.use(
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
       callbackURL: 'http://localhost:3000/api/v1/auth/callback'
     },
-    (accessToken: any, refreshToken: any, profile: any, done: any) => {
-      return done(null, profile);
-    }
+    verifyCallbackGoogle
   )
 );
 passport.serializeUser((user: any, done) => {
@@ -32,6 +29,7 @@ passport.serializeUser((user: any, done) => {
   }
   return done(null, false);
 });
+
 
 passport.deserializeUser(async (id: string, done) => {
   try {

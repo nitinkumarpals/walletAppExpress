@@ -91,7 +91,7 @@ var init_signUpSchema = __esm({
 });
 
 // src/utils/authUtils.ts
-var import_bcryptjs, verifyCallback;
+var import_bcryptjs, verifyCallback, verifyCallbackGoogle;
 var init_authUtils = __esm({
   "src/utils/authUtils.ts"() {
     "use strict";
@@ -107,15 +107,50 @@ var init_authUtils = __esm({
         }
         const user = yield prisma.user.findUnique({
           where: { email },
-          select: { id: true, email: true, password: true, name: true }
+          select: {
+            id: true,
+            email: true,
+            password: true,
+            name: true,
+            authType: true,
+            googleId: true
+          }
         });
         if (!user) {
           return done(null, false, { message: "User not found" });
         }
-        const isMatch = yield import_bcryptjs.default.compare(password, user.password);
+        const isMatch = yield import_bcryptjs.default.compare(password, user.password || "");
         if (!isMatch) {
           return done(null, false, { message: "Invalid credentials" });
         }
+        return done(null, user);
+      } catch (error) {
+        return done(error, false);
+      }
+    });
+    verifyCallbackGoogle = (accessToken, refreshToken, profile, done) => __async(void 0, null, function* () {
+      var _a, _b;
+      try {
+        const email = (_b = (_a = profile.emails) == null ? void 0 : _a.find((emailObj) => emailObj.verified)) == null ? void 0 : _b.value;
+        if (!email) done(null, false, { message: "No verified email found." });
+        const existingUser = yield prisma.user.findUnique({ where: { email } });
+        let user;
+        if (!existingUser || !existingUser.googleId || existingUser.authType !== "GOOGLE") {
+          user = yield prisma.user.upsert({
+            where: {
+              email
+            },
+            update: {
+              authType: "GOOGLE"
+            },
+            create: {
+              email,
+              name: profile.displayName,
+              authType: "GOOGLE",
+              googleId: profile.id
+            }
+          });
+        } else user = existingUser;
         return done(null, user);
       } catch (error) {
         return done(error, false);
@@ -149,9 +184,7 @@ var require_passport = __commonJS({
           clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
           callbackURL: "http://localhost:3000/api/v1/auth/callback"
         },
-        (accessToken, refreshToken, profile, done) => {
-          return done(null, profile);
-        }
+        verifyCallbackGoogle
       )
     );
     import_passport4.default.serializeUser((user, done) => {
@@ -177,7 +210,7 @@ var require_passport = __commonJS({
 var import_express2 = __toESM(require("express"));
 var import_express_session = __toESM(require("express-session"));
 var import_passport2 = __toESM(require("passport"));
-var import_dotenv = __toESM(require("dotenv"));
+var import_config = require("dotenv/config");
 var import_passport3 = __toESM(require_passport());
 
 // src/routes/auth.routes.ts
@@ -254,7 +287,6 @@ var registerUser = (req, res) => __async(void 0, null, function* () {
 
 // src/routes/auth.routes.ts
 var import_passport = __toESM(require("passport"));
-var import_jsonwebtoken2 = __toESM(require("jsonwebtoken"));
 var authRouter = (0, import_express.Router)();
 authRouter.post("/signup", registerUser);
 authRouter.get(
@@ -266,6 +298,7 @@ authRouter.get(
   import_passport.default.authenticate("google", { failureMessage: "failed" }),
   (req, res) => {
     res.status(200).json({
+      message: "Login successful",
       user: req.user
     });
   }
@@ -286,14 +319,9 @@ authRouter.post("/login", (req, res, next) => {
         }
       });
       const _a = req.user, { password } = _a, userData = __objRest(_a, ["password"]);
-      const token = import_jsonwebtoken2.default.sign(
-        { email: userData.email, id: userData.id },
-        process.env.JWT_SECRET || ""
-      );
       res.status(200).json({
         message: "Login successful",
-        userData,
-        token
+        userData
       });
     }
   )(req, res, next);
@@ -308,7 +336,6 @@ authRouter.get("/logout", (req, res) => {
 });
 
 // src/index.ts
-import_dotenv.default.config();
 var app = (0, import_express2.default)();
 var port = 3e3;
 app.use((0, import_express2.json)()).use(

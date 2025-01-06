@@ -1,8 +1,8 @@
 import express, { json } from 'express';
 import session from 'express-session';
 import passport from 'passport'; 
-import dotenv from 'dotenv';
-dotenv.config();
+import 'dotenv/config';
+
 import './config/passport'
 const app = express();
 const port = 3000;
