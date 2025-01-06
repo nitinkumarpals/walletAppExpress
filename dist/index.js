@@ -72,6 +72,24 @@ var init_prismaClient = __esm({
   }
 });
 
+// src/schemas/signUpSchema.ts
+var import_zod, signUpSchema, signInSchema;
+var init_signUpSchema = __esm({
+  "src/schemas/signUpSchema.ts"() {
+    "use strict";
+    import_zod = require("zod");
+    signUpSchema = import_zod.z.object({
+      name: import_zod.z.string().min(1, "Name is Required"),
+      email: import_zod.z.string().email("Invalid email address"),
+      password: import_zod.z.string().min(8, "Password must be at least 8 characters long")
+    });
+    signInSchema = import_zod.z.object({
+      email: import_zod.z.string().email("Invalid email address"),
+      password: import_zod.z.string().min(8, "Password must be at least 8 characters long")
+    });
+  }
+});
+
 // src/utils/authUtils.ts
 var import_bcryptjs, verifyCallback;
 var init_authUtils = __esm({
@@ -79,8 +97,14 @@ var init_authUtils = __esm({
     "use strict";
     import_bcryptjs = __toESM(require("bcryptjs"));
     init_prismaClient();
+    init_signUpSchema();
     verifyCallback = (email, password, done) => __async(void 0, null, function* () {
       try {
+        const parsedData = signInSchema.safeParse({ email, password });
+        if (!parsedData.success) {
+          const errors = "Validation error " + parsedData.error.errors.map((err) => `${err.path} ${err.message}`);
+          return done(null, false, { message: `${errors}` });
+        }
         const user = yield prisma.user.findUnique({
           where: { email },
           select: { id: true, email: true, password: true, name: true }
@@ -106,6 +130,7 @@ var require_passport = __commonJS({
     "use strict";
     var import_passport4 = __toESM(require("passport"));
     var import_passport_local = require("passport-local");
+    var import_passport_google_oauth20 = require("passport-google-oauth20");
     init_authUtils();
     init_prismaClient();
     import_passport4.default.use(
@@ -115,6 +140,18 @@ var require_passport = __commonJS({
           passwordField: "password"
         },
         verifyCallback
+      )
+    );
+    import_passport4.default.use(
+      new import_passport_google_oauth20.Strategy(
+        {
+          clientID: process.env.GOOGLE_CLIENT_ID || "",
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+          callbackURL: "http://localhost:3000/api/v1/auth/callback"
+        },
+        (accessToken, refreshToken, profile, done) => {
+          return done(null, profile);
+        }
       )
     );
     import_passport4.default.serializeUser((user, done) => {
@@ -148,16 +185,7 @@ var import_express = require("express");
 
 // src/controllers/authController.ts
 init_prismaClient();
-
-// src/schemas/signUpSchema.ts
-var import_zod = require("zod");
-var signUpSchema = import_zod.z.object({
-  name: import_zod.z.string().min(1, "Name is Required").optional(),
-  email: import_zod.z.string().email("Invalid email address"),
-  password: import_zod.z.string().min(8, "Password must be at least 8 characters long")
-});
-
-// src/controllers/authController.ts
+init_signUpSchema();
 var import_bcryptjs2 = __toESM(require("bcryptjs"));
 var import_jsonwebtoken = __toESM(require("jsonwebtoken"));
 var registerUser = (req, res) => __async(void 0, null, function* () {
@@ -194,7 +222,7 @@ var registerUser = (req, res) => __async(void 0, null, function* () {
       return;
     }
     const user = yield prisma.user.create({
-      data: { name, email, password: hashedPassword }
+      data: { name, email, password: hashedPassword, authType: "CREDENTIALS" }
     });
     if (!user) {
       res.status(500).json({
@@ -229,6 +257,19 @@ var import_passport = __toESM(require("passport"));
 var import_jsonwebtoken2 = __toESM(require("jsonwebtoken"));
 var authRouter = (0, import_express.Router)();
 authRouter.post("/signup", registerUser);
+authRouter.get(
+  "/authGoogle",
+  import_passport.default.authenticate("google", { scope: ["profile", "email"] })
+);
+authRouter.get(
+  "/callback",
+  import_passport.default.authenticate("google", { failureMessage: "failed" }),
+  (req, res) => {
+    res.status(200).json({
+      user: req.user
+    });
+  }
+);
 authRouter.post("/login", (req, res, next) => {
   import_passport.default.authenticate(
     "local",
@@ -256,6 +297,14 @@ authRouter.post("/login", (req, res, next) => {
       });
     }
   )(req, res, next);
+});
+authRouter.get("/logout", (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      return res.status(500).json({ message: "Logout failed", error: err.message });
+    }
+  });
+  res.status(200).json({ message: "Logout successful" });
 });
 
 // src/index.ts

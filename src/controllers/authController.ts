@@ -1,10 +1,10 @@
-import { Request, Response } from "express";
-import { prisma } from "../prisma/prismaClient";
-import { signUpSchema } from "../schemas/signUpSchema";
-import crypto from "crypto";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import { promises } from "dns";
+import { Request, Response } from 'express';
+import { prisma } from '../prisma/prismaClient';
+import { signUpSchema } from '../schemas/signUpSchema';
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+
 
 export const registerUser = async (
   req: Request,
@@ -17,7 +17,7 @@ export const registerUser = async (
       res.status(400).json({
         success: false,
         message:
-          "Validation error: " +
+          'Validation error: ' +
           parsedBody.error.errors.map((err) => `${err.path[0]} ${err.message}`)
       });
       return;
@@ -34,23 +34,23 @@ export const registerUser = async (
       if (existingUser.name === name) {
         res.status(400).json({
           success: false,
-          message: "Username already exist"
+          message: 'Username already exist'
         });
       } else if (existingUser.email === email) {
         res.status(400).json({
           success: false,
-          message: "User emil already exist"
+          message: 'User emil already exist'
         });
       }
       return;
     }
     const user = await prisma.user.create({
-      data: { name, email, password: hashedPassword }
+      data: { name, email, password: hashedPassword, authType: 'CREDENTIALS' }
     });
     if (!user) {
       res.status(500).json({
         success: false,
-        message: "Error in creating user"
+        message: 'Error in creating user'
       });
       return;
     }
@@ -59,17 +59,17 @@ export const registerUser = async (
         email: user.email,
         id: user.id
       },
-      process.env.JWT_SECRET || ""
+      process.env.JWT_SECRET || ''
     );
     res.status(200).json({
       success: true,
-      message: "user created successfully",
+      message: 'user created successfully',
       token
     });
   } catch (error: Error | any) {
     res.status(500).json({
       success: false,
-      message: "some internal error occurred",
+      message: 'some internal error occurred',
       error: error as Error
     });
   }
