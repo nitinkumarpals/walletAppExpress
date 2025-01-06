@@ -90,15 +90,94 @@ var init_signUpSchema = __esm({
   }
 });
 
-// src/utils/authUtils.ts
-var import_bcryptjs, verifyCallback, verifyCallbackGoogle;
-var init_authUtils = __esm({
-  "src/utils/authUtils.ts"() {
+// src/controllers/authController.ts
+var import_bcryptjs, registerUser, login, loginWithGoogle;
+var init_authController = __esm({
+  "src/controllers/authController.ts"() {
     "use strict";
-    import_bcryptjs = __toESM(require("bcryptjs"));
     init_prismaClient();
     init_signUpSchema();
-    verifyCallback = (email, password, done) => __async(void 0, null, function* () {
+    import_bcryptjs = __toESM(require("bcryptjs"));
+    init_signUpSchema();
+    registerUser = (req, res) => __async(void 0, null, function* () {
+      try {
+        const body = req.body;
+        const parsedBody = signUpSchema.safeParse(body);
+        if (!parsedBody.success) {
+          res.status(400).json({
+            success: false,
+            message: "Validation error: " + parsedBody.error.errors.map((err) => `${err.path[0]} ${err.message}`)
+          });
+          return;
+        }
+        const { email, name, password } = parsedBody.data;
+        const hashedPassword = yield import_bcryptjs.default.hash(password, 10);
+        const existingUser = yield prisma.user.findFirst({
+          where: {
+            OR: [{ name }, { email }]
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            googleId: true,
+            password: true
+          }
+        });
+        if (existingUser) {
+          if (existingUser.name === name) {
+            res.status(400).json({
+              success: false,
+              message: "Username already exist"
+            });
+          } else if (existingUser.email === email) {
+            if (existingUser.googleId && !existingUser.password) {
+              const user2 = yield prisma.user.update({
+                where: { id: existingUser.id },
+                data: {
+                  password: hashedPassword
+                }
+              });
+              res.status(200).json({
+                success: true,
+                message: "User Updated Successfully",
+                id: user2.id.toString(),
+                name: user2.name,
+                email: user2.email,
+                googleId: user2.googleId
+              });
+              return;
+            }
+            res.status(400).json({
+              success: false,
+              message: "User emil already exist"
+            });
+          }
+          return;
+        }
+        const user = yield prisma.user.create({
+          data: { name, email, password: hashedPassword, authType: "CREDENTIALS" }
+        });
+        if (!user) {
+          res.status(500).json({
+            success: false,
+            message: "Error in creating user"
+          });
+          return;
+        }
+        res.status(200).json({
+          success: true,
+          message: "user created successfully"
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "some internal error occurred",
+          error
+        });
+      }
+    });
+    login = (email, password, done) => __async(void 0, null, function* () {
       try {
         const parsedData = signInSchema.safeParse({ email, password });
         if (!parsedData.success) {
@@ -128,7 +207,7 @@ var init_authUtils = __esm({
         return done(error, false);
       }
     });
-    verifyCallbackGoogle = (accessToken, refreshToken, profile, done) => __async(void 0, null, function* () {
+    loginWithGoogle = (accessToken, refreshToken, profile, done) => __async(void 0, null, function* () {
       var _a, _b;
       try {
         const email = (_b = (_a = profile.emails) == null ? void 0 : _a.find((emailObj) => emailObj.verified)) == null ? void 0 : _b.value;
@@ -166,15 +245,15 @@ var require_passport = __commonJS({
     var import_passport4 = __toESM(require("passport"));
     var import_passport_local = require("passport-local");
     var import_passport_google_oauth20 = require("passport-google-oauth20");
-    init_authUtils();
     init_prismaClient();
+    init_authController();
     import_passport4.default.use(
       new import_passport_local.Strategy(
         {
           usernameField: "email",
           passwordField: "password"
         },
-        verifyCallback
+        login
       )
     );
     import_passport4.default.use(
@@ -184,7 +263,7 @@ var require_passport = __commonJS({
           clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
           callbackURL: "http://localhost:3000/api/v1/auth/callback"
         },
-        verifyCallbackGoogle
+        loginWithGoogle
       )
     );
     import_passport4.default.serializeUser((user, done) => {
@@ -215,77 +294,7 @@ var import_passport3 = __toESM(require_passport());
 
 // src/routes/auth.routes.ts
 var import_express = require("express");
-
-// src/controllers/authController.ts
-init_prismaClient();
-init_signUpSchema();
-var import_bcryptjs2 = __toESM(require("bcryptjs"));
-var import_jsonwebtoken = __toESM(require("jsonwebtoken"));
-var registerUser = (req, res) => __async(void 0, null, function* () {
-  try {
-    const body = req.body;
-    const parsedBody = signUpSchema.safeParse(body);
-    if (!parsedBody.success) {
-      res.status(400).json({
-        success: false,
-        message: "Validation error: " + parsedBody.error.errors.map((err) => `${err.path[0]} ${err.message}`)
-      });
-      return;
-    }
-    const { email, name, password } = parsedBody.data;
-    const hashedPassword = yield import_bcryptjs2.default.hash(password, 10);
-    const existingUser = yield prisma.user.findFirst({
-      where: {
-        OR: [{ name }, { email }]
-      },
-      select: { name: true, email: true }
-    });
-    if (existingUser) {
-      if (existingUser.name === name) {
-        res.status(400).json({
-          success: false,
-          message: "Username already exist"
-        });
-      } else if (existingUser.email === email) {
-        res.status(400).json({
-          success: false,
-          message: "User emil already exist"
-        });
-      }
-      return;
-    }
-    const user = yield prisma.user.create({
-      data: { name, email, password: hashedPassword, authType: "CREDENTIALS" }
-    });
-    if (!user) {
-      res.status(500).json({
-        success: false,
-        message: "Error in creating user"
-      });
-      return;
-    }
-    const token = import_jsonwebtoken.default.sign(
-      {
-        email: user.email,
-        id: user.id
-      },
-      process.env.JWT_SECRET || ""
-    );
-    res.status(200).json({
-      success: true,
-      message: "user created successfully",
-      token
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "some internal error occurred",
-      error
-    });
-  }
-});
-
-// src/routes/auth.routes.ts
+init_authController();
 var import_passport = __toESM(require("passport"));
 var authRouter = (0, import_express.Router)();
 authRouter.post("/signup", registerUser);
